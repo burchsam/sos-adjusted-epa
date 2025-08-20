@@ -7,9 +7,14 @@ library(Cairo)
 library(gt)
 
 
-pbp = read_csv("coding-projects/nfl-fast-r/pbp-df-thru23")[, -1]
+pbp = read_csv("coding-projects/nfl-fast-r/pbp-df-thru24")[, -1]
+
 
 games = load_schedules()
+
+
+pbp |> View()
+
 
 
 # Preliminary
@@ -29,10 +34,10 @@ teams_raw = pbp |> select(team) |> pull()
 # Offense
 
 
-off_adj_raw = numeric(797)
+off_adj_raw = numeric(829)
 
 
-for (i in 1:797) { 
+for (i in 1:length(off_adj_raw)) { 
   off_adj_raw[i] = games |> 
     filter(season == seasons_raw[i]) |> 
     select(season, home_team, away_team) |> 
@@ -46,13 +51,14 @@ for (i in 1:797) {
 
 
 
+
 # Defense
 
 
-def_adj_raw = numeric(797)
+def_adj_raw = numeric(829)
 
 
-for (i in 1:797) { 
+for (i in 1:length(def_adj_raw)) { 
   def_adj_raw[i] = games |> 
     filter(season == seasons_raw[i]) |> 
     select(season, home_team, away_team) |> 
@@ -73,15 +79,16 @@ sos_df = pbp |>
   left_join(avg_def_epa, by = "season") |> 
   mutate(adj_mean_epa = mean_epa - (off_sos - mean_epa_allowed_season),
          adj_mean_epa_allowed = mean_epa_allowed - (def_sos - mean_epa_season)) |> 
-  filter(season == 2023)
+  filter(season == 2024)
 
-sos_df |> arrange(adj_mean_epa_allowed)
+
+sos_df |> arrange(off_sos)
 
 ggplot(sos_df, aes(x = off_sos, y = def_sos)) +
   labs(x = "Offesnive SOS",
        y = "Defensive SOS",
-       title = "NFL Strength of Schedule (2023)",
-       subtitle = "top right = hard  |  bottom left = easy  |  strength of schedule = average opponents' 23' efficiency",
+       title = "NFL Strength of Schedule (2024)",
+       subtitle = "top right = hard  |  bottom left = easy  |  strength of schedule = average opponents' 24' efficiency",
        caption = "By: Sam Burch  |  Data @nflfastR") +
   theme(
     plot.title = element_text(hjust = 0.5),
@@ -102,10 +109,10 @@ ggplot(sos_df, aes(x = off_sos, y = def_sos)) +
 # Offensive Performance
 
 ggplot(sos_df, aes(x = adj_mean_epa, y = success_rate)) +
-  labs(x = 'EPA/play',
+  labs(x = 'EPA / Play',
        y = 'Success Rate',
-       title = "NFL Offensive Performances (2023)",
-       subtitle = "EPA/play adjusted for SOS",
+       title = "NFL Offensive Performances (2024)",
+       subtitle = "efficiency adjusted for SOS",
        caption = 'By: Sam Burch  |  Data @nflfastR') +
   theme(
     plot.title = element_text(hjust = 0.5),
@@ -118,17 +125,17 @@ ggplot(sos_df, aes(x = adj_mean_epa, y = success_rate)) +
   stat_smooth(formula = y ~ x, method = 'lm', geom = 'line', se=FALSE, color='gray') +
   nflplotR::geom_mean_lines(aes(x0 = adj_mean_epa, y0 = success_rate))
 
-# ggsave("off_performance.png", width = 16, height = 9, units = "cm")
+# ggsave("off-adj-performance.png", width = 16, height = 9, units = "cm")
 
 
 
 # Defensive Performance
 
-ggplot(sos_df, aes(x = adj_mean_epa_allowed, y = success_rate_allowed)) +
-  labs(x = 'EPA/play Allowed',
+ggplot(sos_df |> filter(team != "CAR", team != "JAX"), aes(x = adj_mean_epa_allowed, y = success_rate_allowed)) +
+  labs(x = 'EPA / Play Allowed',
        y = 'Success Rate Allowed',
-       title = "NFL Defensive Performances (2023)",
-       subtitle = "EPA/play adjusted for SOS",
+       title = "NFL Defensive Performances (2024)",
+       subtitle = "efficiency adjusted for SOS  |  panthers & jags removed",
        caption = 'By: Sam Burch  |  Data @nflfastR') +
   theme(
     plot.title = element_text(hjust = 0.5),
@@ -143,7 +150,34 @@ ggplot(sos_df, aes(x = adj_mean_epa_allowed, y = success_rate_allowed)) +
   stat_smooth(formula = y ~ x, method = 'lm', geom = 'line', se=FALSE, color='gray') +
   nflplotR::geom_mean_lines(aes(x0 = mean_epa_allowed, y0 = success_rate_allowed))
 
-# ggsave("def_performance.png", width = 16, height = 9, units = "cm")
+# ggsave("def-adj-performance-out.png", width = 16, height = 9, units = "cm")
+
+
+
+
+# Team Rankings -----------------------------------------------------------
+
+
+sos_df_full = pbp |>
+  mutate(off_sos = off_adj_raw |> as_vector() |> as.double(),
+         def_sos = def_adj_raw |> as_vector()) |> 
+  left_join(avg_off_epa, by = "season") |> 
+  left_join(avg_def_epa, by = "season") |> 
+  mutate(adj_mean_epa = mean_epa - (off_sos - mean_epa_allowed_season),
+         adj_mean_epa_allowed = mean_epa_allowed - (def_sos - mean_epa_season)) |> 
+  group_by(season) |> 
+  mutate(almost = .6*scale(adj_mean_epa) - .4*scale(adj_mean_epa_allowed)) |>
+  #Maybe leave as z-score in future
+  mutate(ranking = scale(almost) *
+           (20 / (max(scale(almost)) - min(scale(almost))))) |>
+  ungroup() |> 
+  arrange(season, team)
+  
+
+
+# write.csv(sos_df_full, file = "adj-pbp-df-thru24")
+
+
 
 
 
